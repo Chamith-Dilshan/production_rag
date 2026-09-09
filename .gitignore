@@ -63,6 +63,7 @@ Thumbs.db
 dmypy.json
 .ruff_cache/
 /docs
+chroma_langchain_db
 
 # FastAPI specific
 *.log
