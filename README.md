@@ -1,6 +1,6 @@
 uv init
 uv venv
-source .venv/bin/activate
+.venv/Scripts/activate
 
 uv add langchain langchain-core langchain-community langchain-groq langgraph python-dotenv pymupdf
 

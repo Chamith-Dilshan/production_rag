@@ -8,7 +8,7 @@ Using HybridChunker to chunk a PDF document
 and enrich the chunked text with contextual information.
 
 In a RAG / retrieval context, it is important to make sure 
-that the chunker and embedding model are using the same tokenizer.
+that the chunker and tokenizer are using the same embedding model.
 """
 
 FILE_PATH = "../docs/doc1.pdf"
