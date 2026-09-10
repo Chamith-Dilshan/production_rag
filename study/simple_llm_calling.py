@@ -23,12 +23,7 @@ def simple_rag():
         price: float
         features: list[str]
 
-    parser = JsonOutputParser(
-        pydantic_object={
-            "type": "object",
-            "properties": ProductInfo,
-        }
-    )
+    parser = JsonOutputParser(pydantic_object=ProductInfo)
 
     # Create a simple prompt
     prompt = ChatPromptTemplate.from_messages(

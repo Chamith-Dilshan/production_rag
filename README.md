@@ -43,3 +43,11 @@ Keep in mind ->
 3. Embedding quality is more important than quality, so focus on getting quality vectors over
    massive, noise datasets.
 4. Test retrieval seperatly from generation.
+
+Why Most of RAG failed in Production?
+
+1. Bad Chunking.
+2. Embedding quality and mismatch.
+3. Retrival quality and noise.
+4. Context overflow (exceed the context window)
+5. Hallucination.
