@@ -41,12 +41,12 @@ def use_of_chroma_with_langchain():
         Document(
             id="id1",
             page_content="Dogs are great companions, known for their loyalty and friendliness.",
-            metadata={"source": "mammal-pets-doc"},
+            metadata={"source": "mammal-dogs-doc"},
         ),
         Document(
             id="id2",
             page_content="Cats are independent pets that often enjoy their own space.",
-            metadata={"source": "mammal-pets-doc"},
+            metadata={"source": "mammal-cats-doc"},
         ),
     ]
 
@@ -58,12 +58,20 @@ def use_of_chroma_with_langchain():
 
     vector_store.add_documents(documents=documents)
 
+    # Similarity search with score
     results = vector_store.similarity_search_with_score(
         query="why dogs are great companions?"
     )
 
+    # Vector search by doing the embedding yourself
     question_embedding = embeddings.embed_query("why dogs are great companions?")
     result2 = vector_store.similarity_search_by_vector(question_embedding)
+
+    # Filter by metadata
+    filter_condition = {"source": "mammal-cats-doc"}
+    filtered_results = vector_store.similarity_search(
+        query="why dogs are great companions?", filter=filter_condition, k=5
+    )
 
     doc, score = results[0]
     print(f"Result-1 Score: {score}")
@@ -72,6 +80,10 @@ def use_of_chroma_with_langchain():
     doc = result2[0]
     print("\nResult-2")
     print(doc)
+
+    print("\nFiltered Results:")
+    for doc in filtered_results:
+        print(f"Document: {doc}")
 
 
 if __name__ == "__main__":
