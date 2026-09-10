@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -13,19 +14,19 @@ def simple_rag():
     llm = ChatGroq(
         model="openai/gpt-oss-20b",
         temperature=0.7,
-        top_p=1,
         reasoning_effort="medium",
     )
 
     # Define the expected JSON structure
+    class ProductInfo(BaseModel):
+        name: str
+        price: float
+        features: list[str]
+
     parser = JsonOutputParser(
         pydantic_object={
             "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "price": {"type": "number"},
-                "features": {"type": "array", "items": {"type": "string"}},
-            },
+            "properties": ProductInfo,
         }
     )
 
@@ -48,7 +49,7 @@ def simple_rag():
     # Create the chain that guarantees JSON output
     chain = prompt | llm | parser
 
-    def parse_product(description: str) -> dict:
+    def parse_product(description: str):
         result = chain.invoke({"input": description})
         print(json.dumps(result, indent=2))
 
