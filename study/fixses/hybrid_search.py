@@ -102,15 +102,23 @@ Python 3.10 because numerical differences are semantically "close" but functiona
 
 Combine BM25 and Vector search results using Reciprocal Rank Fusion (RRF).
     RRF formula: score = 1 / (k + rank)
+
+BM25 doesn't support incremental updates, so we need to rebuild it
+when adding new docs.
+
+K value -> retrieve more values and let RFF sort it.(K= 4 or higher recommend)
 """
 
 import tempfile
 
 from langchain_chroma import Chroma
 from langchain_classic.retrievers import EnsembleRetriever
-from langchain_community.retrievers import BM25Retriever
+
+# from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
+
+from study.fixses.custom_bm25_retriever import CustomBM25Retriever
 
 embedding_model = OllamaEmbeddings(model="qwen3-embedding:0.6b")
 
@@ -203,42 +211,106 @@ documents = [
 ]
 
 
-def create_retrievers():
-    # create the vector store
+# def create_retrievers():
+#     # create the vector store
+#     vector_store = Chroma.from_documents(
+#         documents=documents,
+#         collection_name="example_collection",
+#         embedding=embedding_model,
+#         persist_directory=tempfile.mkdtemp(),  # Where to save data locally, remove if not necessary
+#     )
+#
+#     # create the vector retriever
+#     vector_retriever = vector_store.as_retriever(
+#         search_type="similarity", search_kwargs={"k": 3}
+#     )
+#
+#     # create a BN25 retriever
+#     # bm25_retriever = BM25Retriever.from_documents(documents=documents, k=3)
+#
+#     # Initialize retriever
+#     bm25_retriever = CustomBM25Retriever(documents)
+#
+#     # combined with EsembleRetriever
+#     ensemble_retriever = EnsembleRetriever(
+#         retrievers=[vector_retriever, bm25_retriever], weights=[0.5, 0.5]
+#     )
+#
+#     return vector_retriever, bm25_retriever, ensemble_retriever
+
+
+# def test_query(query, name, retriever):
+#     results = retriever.invoke(query)
+#     print(f"\nQuery: {query}\n{name} Retriever Results:\n")
+#     for i, doc in enumerate(results):
+#         print(f"{i + 1}. {doc.page_content[:80]}...")
+#
+#     return results
+
+
+def create_retrievers(documents, embedding_model):
+    """Create vector, BM25, and ensemble retrievers"""
+
+    print("Creating vector store...")
     vector_store = Chroma.from_documents(
         documents=documents,
         collection_name="example_collection",
         embedding=embedding_model,
-        persist_directory=tempfile.mkdtemp(),  # Where to save data locally, remove if not necessary
+        persist_directory=tempfile.mkdtemp(),
     )
 
-    # create the vector retriever
+    print("Creating vector retriever...")
     vector_retriever = vector_store.as_retriever(
-        search_type="similarity", search_kwargs={"k": 3}
+        search_type="similarity", search_kwargs={"k": 4}
     )
 
-    # create a BN25 retriever
-    bm25_retriever = BM25Retriever.from_documents(documents=documents, k=3)
+    print("Creating BM25 retriever...")
+    bm25_retriever = CustomBM25Retriever(documents, k=4)
 
-    # combined with EsembleRetriever
-    ensemble_retriever = EnsembleRetriever(
+    print("Creating ensemble retriever...")
+    hybrid_retriever = EnsembleRetriever(
         retrievers=[vector_retriever, bm25_retriever], weights=[0.5, 0.5]
     )
 
-    return vector_retriever, bm25_retriever, ensemble_retriever
+    return vector_retriever, bm25_retriever, hybrid_retriever
 
 
-def test_query(query, name, retriever):
+def test_query(query: str, name: str, retriever):
+    """Test a retriever with a query"""
+    print(f"\n{'=' * 60}")
+    print(f"Query: {query}")
+    print(f"{name} Retriever Results:")
+    print(f"{'=' * 60}")
+
     results = retriever.invoke(query)
-    print(f"\nQuery: {query}\n{name} Retriever Results:\n")
-    for i, doc in enumerate(results):
-        print(f"{i + 1}. {doc.page_content[:80]}...")
+
+    if not results:
+        print("No results found.")
+        return results
+
+    for i, doc in enumerate(results, 1):
+        doc_id = doc.metadata.get("id", "N/A")
+        content = doc.page_content[:100].replace("\n", " ")
+        print(f"\n{i}. [ID: {doc_id}]")
+        print(f"   {content}...")
 
     return results
 
 
 if __name__ == "__main__":
-    vector_retriever, bm25_retriever, ensemble_retriever = create_retrievers()
-    test_query("Fix router configuration", "Vector", vector_retriever)
-    test_query("Fix router configuration", "BM25", bm25_retriever)
-    test_query("Fix router configuration", "Ensemble", ensemble_retriever)
+    # Create retrievers
+    vector_retriever, bm25_retriever, hybrid_retriever = create_retrievers(
+        documents, embedding_model
+    )
+
+    # Test queries
+    test_queries = [
+        "Fix router configuration",
+        "E_DD_APIFAILED error",
+        "API security best practices",
+    ]
+
+    for query in test_queries:
+        test_query(query, "Vector", vector_retriever)
+        test_query(query, "BM25", bm25_retriever)
+        test_query(query, "Hybrid", hybrid_retriever)
