@@ -51,3 +51,10 @@ Why Most of RAG failed in Production?
 3. Retrival quality and noise.
 4. Context overflow (exceed the context window)
 5. Hallucination.
+
+Why LLM debugging is hard
+
+1. Non-deterministic -> the same input can produce different output.
+2. Cascading failures -> If a bad search result came it will cause a bad analysis which leads to bad results.
+3. Silent failures -> No Crashes it will give a very confident wrong answer.
+4. Cost surprises -> 10 iterations instead of 2.
