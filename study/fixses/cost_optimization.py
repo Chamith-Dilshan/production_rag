@@ -209,7 +209,9 @@ class TokenBudgetedLLM:
         self._langfuse_handler = CallbackHandler()
 
     @observe(
-        name="token_budgeted_llm.invoke", capture_input=False, capture_output=False
+        name="token_budgeted_llm.invoke",
+        capture_input=False,
+        capture_output=False,
     )
     def invoke(self, query: str) -> str | None:
         """Execute a query with a pre-call token budget check.

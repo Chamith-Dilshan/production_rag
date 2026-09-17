@@ -19,7 +19,8 @@ Split boundaries ->
 
 1. Fixed Chunking is bad because it can chunk the information of the doc fixed often incomplete chunks.
 
-2. Recursive chunk is more of cutting at the paragraph / sentence level.(This is the default chunking strategy langchain
+2. Recursive chunk is more of cutting at the paragraph / sentence level. (This is the default chunking strategy
+   langchain
    uses).
    It has a decision tree guiding how the chunking is done.
 
@@ -30,7 +31,7 @@ Late chunking is about embedding the full document first then token embeddings. 
 This is not like traditional chunking where we do the chunking first, then embedding. In this way the chunk embeddings
 have full context where traditional chunks don't have an idea what other chunks contain.
 This can help use to get 10-12% accuracy improvement.
-We can use some special embedding models like jina-embedding-v2(please check the latest info before use).
+We can use some special embedding models like jina-embedding-v2 (please check the latest info before use).
 
 Context Type ->
 code, legal, Markdown, etc.
@@ -58,3 +59,27 @@ Why LLM debugging is hard
 2. Cascading failures -> If a bad search result came it will cause a bad analysis which leads to bad results.
 3. Silent failures -> No Crashes it will give a very confident wrong answer.
 4. Cost surprises -> 10 iterations instead of 2.
+
+Observability ->
+
+Traces -
+
+* Agent Flow
+* Inputs/Outputs
+* Tool calls
+* Decisions made
+
+Metrics ->
+
+* Token count
+* Latency per node
+* Cost per run
+* Error rates
+
+Evaluation ->
+
+* Correctness
+* Relevance
+* Human feedback
+* Regression detection
+
