@@ -1,3 +1,4 @@
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -9,6 +10,10 @@ from langchain_groq import ChatGroq
 from langchain_ollama import OllamaEmbeddings
 
 load_dotenv()
+
+# Enable logging to see multi-query generation
+logging.basicConfig(level=logging.INFO, format="%(name)s - %(message)s")
+logging.getLogger("langchain.retrievers.ContextualCompressionRetriever").setLevel(logging.INFO)
 
 INFO_BURIED = [
     Document(
