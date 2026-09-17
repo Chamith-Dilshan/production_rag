@@ -7,7 +7,12 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def demo_parent_document_retriever():
-    """Parent Document Retriever: small chunks for search, large for context."""
+    """Parent Document Retriever: small chunks for search, large for context.
+        with regular retrival, the context that retrieve my not complete chunks.
+        in that cases, llm have to work with incomplete chunks. but with ParentDocumentRetriever
+        it will retrieve large chunk that cover the focus area. this way llm have a complete
+        chunk to work on and avoid hallucination or guessing
+    """
 
     print("=" * 60)
     print("PARENT DOCUMENT RETRIEVER")

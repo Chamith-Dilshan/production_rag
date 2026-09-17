@@ -91,9 +91,9 @@ def run_comparison(documents: list[Document], embedding_model, questions: list[s
         return "\n".join([doc.page_content for doc in docs])
 
     for q in questions:
-        print(f"\n==============================")
+        print("\n==============================")
         print(f"Question: {q}")
-        print(f"==============================")
+        print("==============================")
 
         for strategy in strategies:
             retriever = stores[strategy].as_retriever(
