@@ -204,7 +204,7 @@ results = index.query(
 
 #### Caching
 
-	Observe the frequent queries and cache them. You can use Redis or Other caching solutions.
+	Observe the frequent queries and cache them.
 	important part is that you need to embedd them first and then cash it then use similarity search 
 	or similar method to retrieve them.
 
