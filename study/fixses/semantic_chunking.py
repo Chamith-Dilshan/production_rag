@@ -117,7 +117,7 @@ def run_comparison(documents: list[Document], embedding_model, questions: list[s
 
 
 if __name__ == "__main__":
-    embedding_model = OllamaEmbeddings(model="qwen3-embedding:0.6b")
+    embedding_model = OllamaEmbeddings(model="qwen3-embedding:0.6b", dimensions=512)
 
     sample_documents = [
         Document(
