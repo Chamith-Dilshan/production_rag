@@ -1,3 +1,12 @@
+### Per-Required
+
+setup langfuse and pgvector database.
+you can quickly set them using docker.
+You also need an API key for LLM model use,
+or you can use Ollama.
+Or you can use Groq since they provide a generous
+amount of free tier.
+
 uv init
 uv venv
 .venv/Scripts/activate
@@ -213,3 +222,18 @@ results = index.query(
 	Always start small and continue monitoring. Observe the cost and adjust the parameters accordingly.
 	if the need arrive you can then scale up as needed.
 
+
+
+Stop (pause, keep container):
+
+docker stop pgvector-container
+Start (resume stopped container):
+
+docker start pgvector-container
+Reset (delete container and data, recreate fresh):
+
+docker stop pgvector-container docker rm pgvector-container docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
+Remove image (after stopping/removing container):
+
+docker rmi pgvector/pgvector:pg16
+The container is now stopped. Use docker start pgvector-container to bring it back without recreating it.
