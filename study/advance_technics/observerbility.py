@@ -58,7 +58,7 @@ class MetricsCollector:
         self.metrics = {
             "requests_total": 0,
             "errors_total": 0,
-            "latency_sum": 0,
+            "latency_sum": 0.0,
             "latency_count": 0,
             "tokens_input": 0,
             "tokens_output": 0,
