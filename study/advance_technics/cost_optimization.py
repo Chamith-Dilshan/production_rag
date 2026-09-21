@@ -1,6 +1,8 @@
 import hashlib
 import logging
 import os
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import NotRequired, TypedDict
 
 # Must run before any library builds an SSL context (httpx, Langfuse's OTLP
@@ -10,8 +12,6 @@ from typing import NotRequired, TypedDict
 # does ~143,000 disk operations on Windows and can look like a hang/freeze.
 # See: https://github.com/python/cpython/pull/137596
 import truststore
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
 
 truststore.inject_into_ssl()
 
@@ -178,10 +178,22 @@ class PGVectorSemanticCache:
     """Two-tier cache: an in-process exact-match lookup by query hash, then
     a PGVector semantic similarity search as a fallback.
 
-    `namespace` scopes cache entries (e.g. by effort tier) so, for example,
-    a cheap "low" effort answer is never served for a "high" effort request
-    just because the query text matches - without this, the whole point of
-    effort-based routing would be silently defeated by the cache.
+    `namespace` scopes cache entries (e.g. by effort tier, and/or a prompt
+    version - see ProductionRAGPipeline) so, for example, a cheap "low"
+    effort answer is never served for a "high" effort request just because
+    the query text matches, and a response cached under an old, buggy
+    prompt template stops being served the moment you bump the version.
+
+    `is_cacheable` is a predicate checked before every write; it exists so a
+    known failure-mode response (an empty string, a "the context doesn't
+    contain enough information" fallback, an error message) never gets
+    cached in the first place - since that's the actual cause a bad answer
+    can outlive the bug that produced it. Defaults to "non-empty".
+
+    `ttl`, if set, expires entries after that duration as a backstop against
+    anything the above two don't catch (a stale fact, an updated knowledge
+    base). Entries written before ttl was set (or by a version of this class
+    without it) have no `cached_at` and are treated as never-expiring.
 
     Note: the exact-match tier is a plain in-process dict, so it is NOT
     shared across worker processes in a multi-process deployment (gunicorn
@@ -194,9 +206,13 @@ class PGVectorSemanticCache:
         connection_string: str,
         collection_name: str = "semantic_cache",
         similarity_threshold: float = 0.92,
+        is_cacheable: Callable[[str], bool] | None = None,
+        ttl: timedelta | None = None,
     ):
         self.embeddings = OllamaEmbeddings(model="qwen3-embedding:0.6b")
         self.threshold = similarity_threshold
+        self.is_cacheable = is_cacheable or (lambda response: bool(response.strip()))
+        self.ttl = ttl
         self.vector_store = PGVector(
             embeddings=self.embeddings,
             collection_name=collection_name,
@@ -212,6 +228,15 @@ class PGVectorSemanticCache:
     def _hash_query(query: str, namespace: str = "") -> str:
         """Create an MD5 hash for fast exact-match checks, scoped by namespace."""
         return hashlib.md5(f"{namespace}:{query.lower().strip()}".encode()).hexdigest()
+
+    def _is_expired(self, doc: Document) -> bool:
+        if self.ttl is None:
+            return False
+        cached_at_str = doc.metadata.get("cached_at")
+        if not cached_at_str:
+            return False  # written before TTL tracking existed - don't break it
+        cached_at = datetime.fromisoformat(cached_at_str)
+        return datetime.now(UTC) - cached_at > self.ttl
 
     def get(self, query: str, namespace: str = "") -> str | None:
         """Check the cache: exact-hash first, then semantic similarity."""
@@ -231,6 +256,10 @@ class PGVectorSemanticCache:
                 return None
 
             doc, distance = results[0]
+            if self._is_expired(doc):
+                logger.info("Cache entry expired; treating as a miss")
+                return None
+
             # Cosine distance is in [0, 2]; similarity = 1 - distance can go
             # negative for near-opposite vectors, which we clamp to 0 rather
             # than treat as a match.
@@ -245,16 +274,14 @@ class PGVectorSemanticCache:
         return None
 
     def set(self, query: str, response: str, namespace: str = "") -> None:
-        """Store a query/response pair in cache only if valid and not an error."""
-        # Reject storing empty responses, timeouts, or typical LLM error prefixes
-        lower_resp = response.lower()
-        if (
-            not response.strip()
-            or "error" in lower_resp
-            or "exception" in lower_resp
-            or "timed out" in lower_resp
-        ):
-            logger.warning("Skipping cache write for potential error response.")
+        """Store a query/response pair in both cache tiers.
+
+        Silently skips the write (logging why) if `is_cacheable(response)`
+        is False - e.g. a "don't know" fallback should never poison the
+        cache for every semantically-similar question asked afterward.
+        """
+        if not self.is_cacheable(response):
+            logger.info("Skipping cache write: response failed is_cacheable check")
             return
 
         query_hash = self._hash_query(query, namespace)
@@ -267,37 +294,59 @@ class PGVectorSemanticCache:
                     "response": response,
                     "query_hash": query_hash,
                     "namespace": namespace,
-                    "status": "success",
+                    "cached_at": datetime.now(UTC).isoformat(),
                 },
             )
             self.vector_store.add_documents([doc])
         except Exception:
             logger.error("Cache write failed", exc_info=True)
 
-    def clear(self) -> None:
-        """Clear the cache entirely and ensure the vector store collection/table exists."""
-        self._exact_cache.clear()
-        try:
-            # Recreate the table/collection so subsequent similarity searches don't raise 'Collection not found'
-            self.vector_store.create_vectorstore_table()
-            logger.info(
-                "Cleared and re-initialized PGVector semantic cache collection."
-            )
-        except Exception:
-            logger.error("Failed to clear/re-initialize PGVector cache", exc_info=True)
-
     def invalidate_query(self, query: str, namespace: str = "") -> None:
-        """Remove a specific query from both exact and semantic cache tiers."""
+        """Remove a specific query from both cache tiers.
+
+        PGVector.delete() only deletes by id - there's no metadata `filter`
+        parameter on it (passing one is silently ignored). So this looks up
+        the id(s) of matching entries via similarity_search_with_score's
+        filter first, then deletes those ids. Note this still costs an
+        embedding call (embed_query), since that method always embeds the
+        query before searching - there's no id-free metadata-only lookup in
+        PGVector's public API.
+        """
         query_hash = self._hash_query(query, namespace)
         self._exact_cache.pop(query_hash, None)
 
         try:
-            # PGVector supports deletion via metadata filters
-            self.vector_store.delete(filter={"query_hash": query_hash})
+            matches = self.vector_store.similarity_search_with_score(
+                query, k=5, filter={"query_hash": query_hash}
+            )
+            ids = [doc.id for doc, _ in matches if doc.id is not None]
+            if ids:
+                self.vector_store.delete(ids=ids)
+                logger.info(
+                    "Invalidated %d cached entr%s",
+                    len(ids),
+                    "y" if len(ids) == 1 else "ies",
+                )
+            else:
+                logger.info("No cached entry found to invalidate for this query")
         except Exception:
             logger.error(
                 "Failed to invalidate query from PGVector cache", exc_info=True
             )
+
+    def clear(self) -> None:
+        """Clear the cache entirely: drops the collection and recreates it
+        empty, so the cache stays usable immediately afterward (skipping
+        create_collection() here would make every subsequent set() raise
+        ValueError: Collection not found).
+        """
+        self._exact_cache.clear()
+        try:
+            self.vector_store.delete_collection()
+            self.vector_store.create_collection()
+            logger.info("Cleared PGVector semantic cache collection.")
+        except Exception:
+            logger.error("Failed to clear PGVector cache collection", exc_info=True)
 
 
 # === Production Cached LLM Wrapper ===
@@ -395,11 +444,33 @@ def get_sample_documents() -> list[Document]:
 
 
 class ProductionRAGPipeline:
-    """End-to-end RAG pipeline using PGVector and Langfuse."""
+    """End-to-end RAG pipeline using PGVector and Langfuse.
 
-    def __init__(self, connection_string: str):
+    `prompt_version` is folded into the cache namespace alongside the effort
+    tier. Bump it whenever the prompt template changes: old cache entries
+    (written under the previous version) simply stop matching - no manual
+    cleanup needed, and a prompt bug like an accidentally-empty context can
+    never permanently poison the cache for that query's neighborhood again.
+    Old entries become harmless orphaned rows; clear() or a TTL removes them
+    eventually.
+    """
+
+    def __init__(self, connection_string: str, prompt_version: str = "v1"):
+        self.prompt_version = prompt_version
         self.router = EffortModelRouter()
-        self.cache = PGVectorSemanticCache(connection_string=connection_string)
+        self.cache = PGVectorSemanticCache(
+            connection_string=connection_string,
+            # Never cache the "I couldn't find an answer" fallback - if it's
+            # showing up, something upstream (retrieval, an empty context,
+            # a template bug) likely misfired, and caching it would make the
+            # cache actively wrong for every similar question afterward.
+            is_cacheable=lambda r: (
+                bool(r.strip())
+                and "don't know" not in r.lower()
+                and "do not know" not in r.lower()
+            ),
+            ttl=timedelta(days=7),
+        )
         self.embeddings = OllamaEmbeddings(model="qwen3-embedding:0.6b")
         self.vector_store = PGVector(
             embeddings=self.embeddings,
@@ -413,6 +484,9 @@ class ProductionRAGPipeline:
             "you don't know.\n\nContext:\n{context}\n\nQuestion: {question}"
         )
 
+    def _cache_namespace(self, effort: str) -> str:
+        return f"{effort}:{self.prompt_version}"
+
     def initialize_kb(self) -> None:
         """Populate the vector store with test documents."""
         docs = get_sample_documents()
@@ -424,10 +498,12 @@ class ProductionRAGPipeline:
         """Execute RAG flow with caching, effort routing, and telemetry."""
         langfuse = get_client()
         langfuse.update_current_span(input=query, metadata={"effort": effort})
+        namespace = self._cache_namespace(effort)
 
-        # 1. Check the cache, scoped to this effort tier - see
-        # PGVectorSemanticCache's docstring for why that scoping matters.
-        cached_result = self.cache.get(query, namespace=effort)
+        # 1. Check the cache, scoped to this effort tier and prompt version -
+        # see PGVectorSemanticCache's and this class's docstrings for why
+        # both matter.
+        cached_result = self.cache.get(query, namespace=namespace)
         if cached_result:
             langfuse.update_current_span(
                 output=cached_result, metadata={"cache_hit": True}
@@ -450,26 +526,21 @@ class ProductionRAGPipeline:
 
         # 4. Invoke the (tier-cached) LLM with effort parameters
         llm = self.router.get_llm(effort)
-        chain = (
-            {"context": context, "question": RunnablePassthrough()}
-            | self.prompt
-            | llm
-            | StrOutputParser()
-        )
+        chain = self.prompt | llm
         try:
             response = chain.invoke(
                 {"context": context, "question": query},
                 config={"callbacks": [self.router._langfuse_handler]},
             )
         except Exception as e:
-            # Do not cache exceptions or failures
             raise RuntimeError(f"LLM invocation failed (effort={effort}): {e}") from e
 
         result_text = _extract_text(response.content)
 
-        # 5. Save to cache only if valid
-        if result_text and "error" not in result_text.lower():
-            self.cache.set(query, result_text, namespace=effort)
+        # 5. Save to the cache, scoped to this effort tier and prompt version.
+        # set() itself will skip the write if result_text looks like a
+        # "don't know" fallback (see is_cacheable above).
+        self.cache.set(query, result_text, namespace=namespace)
 
         langfuse.update_current_span(
             output=result_text,
@@ -500,24 +571,20 @@ if __name__ == "__main__":
             "Set LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL."
         )
 
-    # Test RAG Pipeline
+    # 1. Test RAG Pipeline
     rag_system = ProductionRAGPipeline(connection_string=DB_CONNECTION)
-    rag_system.initialize_kb()  # Run once to ingest sample docs
-
-    # Clear the entire semantic cache before running or re-indexing
-    # rag_system.cache.clear()
-
-    # Invalidate a specific cached query if a bad response was stored
-    # rag_system.cache.invalidate_query(
-    #     query="Explain LangGraph state management.", namespace="low"
-    # )
+    # rag_system.initialize_kb()  # Run once to ingest sample docs
 
     # Test with low vs high effort - these are now genuinely independent,
     # since the cache is scoped per effort tier.
-    res_low = rag_system.run("Explain LangGraph state management.", effort="low")
+    res_low = rag_system.run(
+        "How exactly LangGraph state management works?", effort="low"
+    )
     print(f"Low Effort Result: {res_low}")
 
-    res_high = rag_system.run("Explain LangGraph state management.", effort="high")
+    res_high = rag_system.run(
+        "How exactly LangGraph state management works?", effort="high"
+    )
     print(f"High Effort Result: {res_high}")
 
     langfuse.flush()
