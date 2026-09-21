@@ -264,6 +264,15 @@ class PGVectorSemanticCache:
             # negative for near-opposite vectors, which we clamp to 0 rather
             # than treat as a match.
             similarity = max(0.0, 1.0 - distance)
+            langfuse.update_current_span(
+                metadata={
+                    "cache_similarity": similarity,
+                    "cache_threshold": self.threshold,
+                    "cache_match_type": "semantic_hit"
+                    if similarity >= self.threshold
+                    else "below_threshold",
+                }
+            )
 
             if similarity >= self.threshold:
                 logger.info("Cache HIT (semantic, similarity=%.4f)", similarity)
