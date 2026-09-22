@@ -222,8 +222,6 @@ results = index.query(
 	Always start small and continue monitoring. Observe the cost and adjust the parameters accordingly.
 	if the need arrive you can then scale up as needed.
 
-
-
 Stop (pause, keep container):
 
 docker stop pgvector-container
@@ -232,8 +230,118 @@ Start (resume stopped container):
 docker start pgvector-container
 Reset (delete container and data, recreate fresh):
 
-docker stop pgvector-container docker rm pgvector-container docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
+docker stop pgvector-container docker rm pgvector-container docker run --name pgvector-container -e
+POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
 Remove image (after stopping/removing container):
 
 docker rmi pgvector/pgvector:pg16
 The container is now stopped. Use docker start pgvector-container to bring it back without recreating it.
+
+to check the settings quickly
+
+````cmd
+uv run python -c "
+from app.config import get_settings
+settings = get_settings()
+print(settings)
+"
+````
+
+### How to commit
+
+Conventional Commits Overview
+Conventional Commits is a standardized format for writing commit messages that makes your version control history
+readable and enables automated changelog generation. The format follows a structure: type (scope): subject.
+
+Here's a detailed breakdown of the most common commit types:
+
+Type Purpose When to Use Example
+feat A new feature When you add new functionality to the application feat (auth): add password reset email
+fix A bug fix When you fix a reported bug or issue fix (payment): correct amount calculation in invoice
+docs Documentation changes When you update README, API docs, comments, or guides docs: add installation instructions
+style Code style changes When you format code, fix linting issues, or adjust whitespace (no logic changes)    style:
+reformat user service with prettier
+refactor Code refactoring When you restructure code without changing its behavior refactor (database): extract query
+logic into helpers
+perf Performance improvements When you optimize code for speed or memory perf (cache): implement redis for session
+storage
+test Test-related changes When you add, update, or fix tests test (auth): add unit tests for login flow
+chore Maintenance tasks When you update dependencies, build tools, or CI/CD configs chore: upgrade react to v18
+ci CI/CD pipeline changes When you modify GitHub Actions, Jenkins, or other CI configs ci: add automated deployment
+workflow
+revert Reverting a previous commit When you undo a previous change revert: remove experimental feature from v2.3
+Detailed Guidelines
+feat (Feature)
+Use when you're adding new functionality that users or other parts of the system can benefit from. This is a breaking
+change trigger if it modifies the API contract, so note that in your commit body if needed.
+
+feat (api): add user role-based access control
+fix (Bug Fix)
+Use when you're resolving a bug reported by users or found in testing. Always reference the issue number if applicable.
+
+fix (validation): prevent null pointer in email validation (#1234)
+docs (Documentation)
+Use when you're updating documentation only—no code changes. This includes README updates, inline comments, API docs, or
+tutorials.
+
+docs: add authentication section to API guide
+style (Code Style)
+Use when making formatting-only changes that don't affect the code's behavior: whitespace, indentation, semicolons,
+quotes, linting fixes, etc. This is not for logic changes; that's a refactor.
+
+style: remove trailing whitespace and fix indentation
+refactor (Code Refactoring)
+Use when you're restructuring existing code for readability, maintainability, or efficiency, but without changing
+behavior. Extract functions, rename variables, reorganize imports, etc.
+
+refactor (parser): split monolithic parser into smaller modules
+perf (Performance)
+Use when you're making optimization changes that improve speed, memory usage, or scalability. Always measure the
+improvement if possible.
+
+perf (rendering): memoize expensive calculations in component
+test (Testing)
+Use when you're adding, fixing, or updating tests. This includes unit tests, integration tests, e2e tests, or test
+configurations.
+
+test (checkout): add edge case tests for discount calculations
+chore (Chores/Maintenance)
+Use for routine maintenance tasks that don't affect the production code directly: dependency updates, build scripts,
+tooling configs, version bumps, etc.
+
+chore (deps): upgrade jest from v27 to v28
+ci (Continuous Integration)
+Use when you're modifying CI/CD pipelines: GitHub Actions, GitLab CI, Jenkins, deployment scripts, automated testing,
+etc.
+
+ci: add automated smoke tests to deployment pipeline
+revert (Revert)
+Use when you're undoing a previous commit. Include the original commit hash in the body.
+
+revert: remove debug logging that broke production (#456)
+Best Practices
+Include a scope (optional but recommended): The part in parentheses clarifies what area was affected.
+
+feat (auth): add JWT token refresh mechanism
+^^^^
+scope
+Write in imperative mood: Use "add," "fix," "update" instead of "added," "fixed," "updated."
+
+✅ fix (cache): clear stale entries on startup
+❌ fix (cache): cleared stale entries on startup
+Keep the subject under 50 characters: Make it scannable in git logs.
+
+Add a detailed body for complex changes: Separate it from the subject with a blank line and explain the why, not just
+the what.
+
+fix (payment): correct rounding error in tax calculation
+
+The tax calculation was using floor () instead of proper rounding,
+causing discrepancies of up to $0.01 per transaction. Changed to
+use Decimal with ROUND_HALF_UP for accuracy.
+Reference issues: Link to issue trackers when relevant.
+
+feat (notifications): implement push notifications
+
+Closes #789
+Related to #456
