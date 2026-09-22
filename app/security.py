@@ -23,6 +23,7 @@ from langfuse.langchain import CallbackHandler
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+
 def _extract_text(content: str | list[str | dict]) -> str:
     """Normalize a LangChain message's `.content` into plain text.
 
@@ -190,6 +191,7 @@ class OutputValidator:
 
         return True, output, None
 
+
 # === LLM-as-Guard Pattern ===
 class SecurityGuard:
     """Use LLM to detect malicious intent and unsafe prompts."""
@@ -268,9 +270,8 @@ class SecurityGuard:
         return parsed  # type: ignore[return-value]
 
 
-
 # === Secure Pipeline ===
-class SecurePipeline:
+class SecurityPipeline:
     """Complete secure processing pipeline with Langfuse observability."""
 
     def __init__(self, max_input_chars: int = 4000):
