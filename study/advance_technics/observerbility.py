@@ -2,7 +2,7 @@
 Monitoring and Logging for Production
 Structured logging, metrics, and alerts
 Later you can easily add these logs to track. such as datadog
-structered logs more easy to monitor and reson with than plain strings.
+structered logs are more easy to monitor and reson with than plain strings.
 """
 
 import json
@@ -58,7 +58,7 @@ class MetricsCollector:
         self.metrics = {
             "requests_total": 0,
             "errors_total": 0,
-            "latency_sum": 0,
+            "latency_sum": 0.0,
             "latency_count": 0,
             "tokens_input": 0,
             "tokens_output": 0,
