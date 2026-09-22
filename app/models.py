@@ -4,10 +4,9 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    """Incoming chat requests"""
+    """Incoming chat request."""
 
     message: str = Field(
-        ...,
         min_length=1,
         max_length=10000,
         description="The user's message to the agent",
@@ -16,7 +15,7 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Chat response returned to the client"""
+    """Chat response returned to the client."""
 
     response: str
     thread_id: str
@@ -30,16 +29,16 @@ class ChatResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response"""
+    """Health check response."""
 
     status: str = "healthy"
     environment: str
     version: str = "1.0.0"
-    checks: dict = {}
+    check: dict[str, bool]
 
 
 class MetricsResponse(BaseModel):
-    """Metrics response returned to the client"""
+    """Metrics response returned to the client."""
 
     total_requests: int
     total_errors: int
@@ -51,7 +50,7 @@ class MetricsResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Error response"""
+    """Error response."""
 
     error: str
     detail: str | None = None

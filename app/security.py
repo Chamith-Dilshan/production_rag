@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import re
 from typing import NotRequired, TypedDict
 
@@ -259,7 +258,7 @@ class SecurityGuard:
             parsed = json.loads(raw)
             if not isinstance(parsed, dict) or "safe" not in parsed:
                 raise ValueError("Guard response missing 'safe' field")
-        except json.JSONDecodeError, ValueError:
+        except (json.JSONDecodeError, ValueError):
             logger.error("Failed to parse security guard response: %r", raw)
             parsed = {
                 "safe": False,
@@ -290,6 +289,30 @@ class SecurityPipeline:
             temperature=0.7,
         )
         self._langfuse_handler = CallbackHandler()
+
+    def check_input(self, user_input: str) -> tuple[bool, str, list[str]]:
+        """Apply local input checks before the generation agent is called."""
+        notes: list[str] = []
+        if len(user_input) > self.max_input_chars:
+            return False, user_input, [
+                f"Input exceeds {self.max_input_chars} character limit"
+            ]
+
+        is_suspicious, reason = self.sanitizer.is_suspicious(user_input)
+        if is_suspicious:
+            return False, user_input, [reason or "Suspicious input detected"]
+
+        sanitized = self.sanitizer.sanitize(user_input)
+        input_pii = self.pii_detector.detect(sanitized)
+        if input_pii:
+            sanitized = self.pii_detector.mask(sanitized)
+            notes.append(f"Input PII masked: {list(input_pii)}")
+        return True, sanitized, notes
+
+    def check_output(self, output: str) -> tuple[str, str | None]:
+        """Validate generated output and return cleaned text plus a warning."""
+        _, cleaned_output, reason = self.validator.validate(output)
+        return cleaned_output, reason
 
     @observe(name="secure_pipeline_process", capture_input=False, capture_output=False)
     def process(self, user_input: str) -> ProcessResult:

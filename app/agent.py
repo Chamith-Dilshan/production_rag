@@ -16,7 +16,7 @@ class AgentState(TypedDict):
     uses annotated with add_messages reducer for message
     accumulation"""
 
-    message: Annotated[list[BaseMessage], add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
     error: str | None
     retry_count: int
     model_used: str
@@ -63,8 +63,8 @@ class ProductionAgent:
         def process_message(state: AgentState) -> dict:
             """try to process the message with the primary model"""
             try:
-                response = self.primary_llm.invoke(state["message"])
-                return {"message": [response], "error": None, "model_used": "primary"}
+                response = self.primary_llm.invoke(state["messages"])
+                return {"messages": [response], "error": None, "model_used": "primary"}
             except Exception as e:
                 return {
                     "error": str(e),
@@ -75,15 +75,15 @@ class ProductionAgent:
         def try_fallback(state: AgentState) -> dict:
             """fallback to a secondary model"""
             try:
-                response = self.fallback_llm.invoke(state["message"])
-                return {"message": [response], "error": None, "model_used": "fallback"}
+                response = self.fallback_llm.invoke(state["messages"])
+                return {"messages": [response], "error": None, "model_used": "fallback"}
             except Exception as e:
                 return {"error": str(e), "model_used": ""}
 
-        def handel_error(state: AgentState) -> dict:
+        def handle_error(state: AgentState) -> dict:
             """Gracefully handel errors"""
             return {
-                "message": [
+                "messages": [
                     AIMessage(
                         content=(
                             "Ï'm sorry. I'm having trouble processing ypur request"
@@ -116,7 +116,7 @@ class ProductionAgent:
 
         graph.add_node("process", process_message)
         graph.add_node("fallback", try_fallback)
-        graph.add_node("error", handel_error)
+        graph.add_node("error", handle_error)
 
         graph.add_edge(START, "process")
         graph.add_conditional_edges(
@@ -141,7 +141,7 @@ class ProductionAgent:
 
             result = self.graph.invoke(
                 {
-                    "message": [HumanMessage(content=message)],
+                    "messages": [HumanMessage(content=message)],
                     "error": None,
                     "retry_count": 0,
                     "model_used": "",
@@ -149,10 +149,10 @@ class ProductionAgent:
                 config={"callbacks": [self._langfuse_handler]},
             )
 
-            langfuse_client.update_current_span(output=result["message"][-1].content)
+            langfuse_client.update_current_span(output=result["messages"][-1].content)
 
             return {
-                "response": result["message"][-1].content,
+                "response": result["messages"][-1].content,
                 "model_used": result.get("model_used", "unknown"),
                 "error": result.get("error"),
             }

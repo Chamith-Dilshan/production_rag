@@ -32,7 +32,7 @@ class ResponseCache:
         if key in self._cache:
             entry = self._cache[key]
             cached_at = datetime.fromisoformat(entry["timestamp"])
-            if datetime.now(UTC) - cached_at < self.ttl:
+            if datetime.now(UTC) - cached_at < timedelta(seconds=self.ttl):
                 self._hits += 1
                 return entry["response"]
             else:
@@ -51,8 +51,8 @@ class ResponseCache:
         }
 
     @property
-    def status(self) -> dict:
-        """cache performance statistics"""
+    def status(self) -> dict[str, int | float | str]:
+        """Return cache performance statistics."""
         total = self._hits + self._misses
         hit_rate = self._hits / total if total > 0 else 0.0
         return {

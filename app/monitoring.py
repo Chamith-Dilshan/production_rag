@@ -1,13 +1,14 @@
-import datetime
 import json
 import logging
-from datetime import UTC
+import time
+from datetime import UTC, datetime
+from typing import Any
 
 
 class JSONFormatter(logging.Formatter):
     """Formate log records as JSON for log aggregration (ELK, Datadog, etc.)"""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         log_object = {
             "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
@@ -17,8 +18,9 @@ class JSONFormatter(logging.Formatter):
         }
 
         # Merge any extra data attached to the record
-        if hasattr(record, "extra_data"):
-            log_object.update(record.extra_data)
+        extra_data = getattr(record, "extra_data", None)
+        if isinstance(extra_data, dict):
+            log_object.update(extra_data)
         return json.dumps(log_object)
 
     def get_logger(self, name: str = "production-api") -> logging.Logger:
@@ -38,24 +40,26 @@ class MetricsCollector:
         from prometheus_client import Counter, Histogram
         """
 
-    def __init__(self):
-        self.requests_total = 0
-        self._errors_total = 0
-        self._latency_sum = 0.0
-        self._latency_count = 0
-        self._token_input = 0
-        self._token_output = 0
-        self._cache_hits = 0
-        self._cache_misses = 0
+     def __init__(self):
+        self.metrics: dict[str, int | float] = {
+            "requests_total": 0,
+            "errors_total": 0,
+            "latency_sum": 0.0,
+            "latency_count": 0,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+        }
 
-    def record_request(
+     def record_request(
         self,
         latency_ms: float,
         input_tokens: int,
         output_tokens: int,
         error: bool = False,
         cache_hit: bool = False,
-    ):
+    ) -> None:
         self.metrics["requests_total"] += 1
         self.metrics["latency_sum"] += latency_ms
         self.metrics["latency_count"] += 1
@@ -70,7 +74,8 @@ class MetricsCollector:
         else:
             self.metrics["cache_misses"] += 1
 
-    def get_summary(self) -> dict:
+     @property
+     def summary(self) -> dict[str, int | float | str]:
         avg_latency = (
             self.metrics["latency_sum"] / self.metrics["latency_count"]
             if self.metrics["latency_count"] > 0
@@ -100,11 +105,16 @@ class MetricsCollector:
 
 
 class RequestTimer:
-    """ Context manager for timing requests"""
+    """Context manager for measuring elapsed request time in milliseconds."""
 
-    def __enter__(self):
-        self.start = datetime.now(UTC)
+    def __enter__(self) -> RequestTimer:
+        self._start = time.perf_counter()
         return self
 
-    def __exit__(self, *args):
-        self.elapsed_ms = (datetime.now(UTC) = self.start) * 1000
+    @property
+    def elapsed_ms(self) -> float:
+        """Return elapsed time while active and after context exit."""
+        return (time.perf_counter() - self._start) * 1000
+
+    def __exit__(self, *args: Any) -> None:
+        return None
