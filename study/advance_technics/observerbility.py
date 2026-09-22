@@ -2,7 +2,7 @@
 Monitoring and Logging for Production
 Structured logging, metrics, and alerts
 Later you can easily add these logs to track. such as datadog
-structered logs more easy to monitor and reson with than plain strings.
+structered logs are more easy to monitor and reson with than plain strings.
 """
 
 import json
