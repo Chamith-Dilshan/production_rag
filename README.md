@@ -1,347 +1,478 @@
-### Per-Required
+<p align="center">
+	<img src="https://cdn.prod.website-files.com/65b8cd72835ceeacd4449a53/6a9936e4f7726409a9ce4092_LangChain_Lockup_Black%201-1.svg" alt="LangChain" width="380" />
+</p>
 
-setup langfuse and pgvector database.
-you can quickly set them using docker.
-You also need an API key for LLM model use,
-or you can use Ollama.
-Or you can use Groq since they provide a generous
-amount of free tier.
+<div align="center">
 
-uv init
-uv venv
-.venv/Scripts/activate
+# Production RAG
 
-uv add langchain langchain-core langchain-community langchain-groq langgraph python-dotenv pymupdf
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141.1-009688.svg)](https://fastapi.tiangolo.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-v1-orange.svg)](https://langchain-ai.github.io/langgraph/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+</div>
 
-EMBEDDING_MODEL = "qwen3-embedding"
+A production-oriented FastAPI application for a LangGraph-powered RAG assistant. It combines retrieval, orchestration,
+security checks, tracing, and operational metrics in a structure suitable for local development and deployment.
 
-In a RAG / retrieval context, it is important to make sure
-that the chunker and tokenizer are using the same embedding model.
-Make sure that indexing and querying are using the same embedding model.
-When you're deciding what embedding model is going to use, you need to take account of its dimensions as well.
-For most cases 768 to 1536 dimensions are good.
+## Overview
 
-Chunk size is matter it shouldn't be too small or too large. The sweet spot is between 200-1000 tokens.
-Next is overlap between chunks. It helps to preserve context.
+This repository is intended as a practical starting point for building a production-ready retrieval-augmented generation
+system with the following capabilities:
 
-Split boundaries ->
+- FastAPI HTTP API
+- LangGraph orchestration
+- LangChain model integration
+- caching and request metrics
+- input and output validation
+- Langfuse observability
+- Test automation and coverage checks
 
-1. Fixed Chunking is bad because it can chunk the information of the doc fixed often incomplete chunks.
+## Why this project exists
 
-2. Recursive chunk is more of cutting at the paragraph / sentence level. (This is the default chunking strategy
-   langchain
-   uses).
-   It has a decision tree guiding how the chunking is done.
+The goal is to build a secure and observable RAG service that is useful in real deployment scenarios, not just a
+notebook prototype. In production, RAG systems often fail due to weak chunking, embedding mismatches, noisy retrieval,
+context overflow, and model instability. This repo includes patterns and guardrails to tackle those issues early.
 
-3. We can use Semantic chunk to cut at meaningful boundaries.it first embeds each sentence and compares
-   adjacent sentence embeddings to decide the chunking. Then splits when the embedding similarity is low.
+## Features
 
-Late chunking is about embedding the full document first then token embeddings. After that we do the chunking.
-This is not like traditional chunking where we do the chunking first, then embedding. In this way the chunk embeddings
-have full context where traditional chunks don't have an idea what other chunks contain.
-This can help use to get 10-12% accuracy improvement.
-We can use some special embedding models like jina-embedding-v2 (please check the latest info before use).
+- `/chat` endpoint with security validation and cache checks
+- `/health` readiness endpoint
+- `/metrics` summary endpoint
+- `/cache/status` cache diagnostics
+- prompt injection guardrails
+- PII detection and masking for input and output
+- structured JSON logging
+- request timing and performance metrics
+- FastAPI validation with Pydantic models
+- pytest-based testing with coverage support
 
-Context Type ->
-code, legal, Markdown, etc.
-each context type has different treatment.
+## Architecture overview
 
-Keep in mind ->
-
-1. Use the same embedding model for indexing and querying.
-2. Use the same tokenizer for indexing and querying.
-3. Embedding quality is more important than quality, so focus on getting quality vectors over
-   massive, noise datasets.
-4. Test retrieval seperatly from generation.
-
-Why Most of RAG failed in Production?
-
-1. Bad Chunking.
-2. Embedding quality and mismatch.
-3. Retrival quality and noise.
-4. Context overflow (exceed the context window)
-5. Hallucination.
-
-Why LLM debugging is hard
-
-1. Non-deterministic -> the same input can produce different output.
-2. Cascading failures -> If a bad search result came it will cause a bad analysis which leads to bad results.
-3. Silent failures -> No Crashes it will give a very confident wrong answer.
-4. Cost surprises -> 10 iterations instead of 2.
-
-Observability ->
-
-Traces -
-
-* Agent Flow
-* Inputs/Outputs
-* Tool calls
-* Decisions made
-
-Metrics ->
-
-* Token count
-* Latency per node
-* Cost per run
-* Error rates
-
-Evaluation ->
-
-* Correctness
-* Relevance
-* Human feedback
-* Regression detection
-
-Vector Index Tuning ->
-
-Index types ->
-
-* HNSW
-* IVFFlat
-
-### HNSW
-
-An HNSW index creates a multilayer graph. It has better query performance than IVFFlat (in terms of speed-recall
-tradeoff),
-but has slower build times and uses more memory. Also, an index can be created without any data in the table since there
-isn’t a training step like IVFFlat.
-
-Specify HNSW parameters ->
-
-* m - the max number of connections per layer (16 by default)
-* ef_construction - the size of the dynamic candidate list for constructing the graph (64 by default)
-
-A higher value of ef_construction provides better recall at the cost of index build time / insert speed.
-
-### IVFFlat
-
-An IVFFlat index divides vectors into lists, and then searches a subset of those lists that are closest to the query
-vector. It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of
-speed-recall tradeoff).
-
-Three keys to achieving good recall are:
-
-* Create the index after the table has some data
-* Choose an appropriate number of lists - a good place to start is rows / 1000 for up to 1M rows and sqrt (rows) for
-  over 1M rows
-* When querying, specify an appropriate number of probes (higher is better for recall, lower is better for speed) - a
-  good place to start is sqrt (lists)
-
-### How to create an HNSW index
-
-#### pgvector
-
-types ->
-
-* vector - up to 2,000 dimensions
-* halfvec - up to 4,000 dimensions
-* bit - up to 64,000 dimensions
-* sparsevec - up to 1,000 non-zero elements
-
-Distance functions ->
-
-* L2 distance
-* Inner product
-* Cosine distance
-* L1 distance
-* Hamming distance
-* Jaccard distance
-
-based on that the implementation will be different.
-this is example for Cosine distance.
-
-````pgvector
-CREATE INDEX ON documents
-	USING hnsw (embedding vector_cosine_ops)
-	WITH (m = 16, ef_construction = 64);
-````
-
-````pgvector
-# At query time, set ef_search
-SET hnsw.ef_search = 100; # Higher = more accurate and slower
-````
-
-#### Chroma
-
-````chroma
-collection = client.create_collection(
-	name="my_collection"
-	metadata={
-		'hnsw:M': 16
-		'hnsw:construction_ef': 100
-		'hnsw:search_ef': 50
-	}
-)
-````
-
-### Cost Optimization Strategies
-
-#### Reduce Dimension
-
-	Most of the time you may use 1536 dimmetions for the models.
-	you can reduce it to around 512 to save the cost.
-
-```
-embedding_model = OllamaEmbeddings(
-	model="qwen3-embedding:0.6b", 
-	dimensions=512
-)
+```mermaid
+flowchart TD
+	A[Client Request] --> B[FastAPI /chat]
+	B --> C[Security Pipeline]
+	C --> D{Cache hit?}
+	D -->|Yes| E[Return cached answer]
+	D -->|No| F[ProductionAgent]
+	F --> G[Primary LLM]
+	G --> H{Primary call succeeded?}
+	H -->|No| I[Fallback LLM]
+	I --> J{Fallback succeeded?}
+	J -->|Yes| K[Return response]
+	J -->|No| L[Error Handler]
+	K --> M[Validate output]
+	L --> M
+	M --> N[Cache result]
+	N --> O[Metrics + Langfuse tracing]
+	O --> P[HTTP response]
 ```
 
-#### Quantization
+This flow reflects the actual application structure
+in [app/agent.py](app/agent.py), [app/main.py](app/main.py), [app/security.py](app/security.py),
+and [app/cache.py](app/cache.py).
 
-	It is about converting float32 to int8 or binary, this will reduce
-    bytes per dimension.
+## Project structure
 
-#### Batch Queries
+```text
+.
+├── app/
+│   ├── agent.py
+│   ├── cache.py
+│   ├── config.py
+│   ├── main.py
+│   ├── models.py
+│   ├── monitoring.py
+│   └── security.py
+├── tests/
+│   ├── api/
+│   ├── unit/
+│   └── conftest.py
+├── images/
+│   └── .gitkeep
+├── .env.example
+├── .github/workflows/ci.yml
+├── Dockerfile
+├── docker-compose.yml
+├── CONTRIBUTING.md
+├── LICENSE
+├── pyproject.toml
+├── README.md
+├── uv.lock
+└── study/
+```
 
-	The idea is insted of doing individual 10K queries, you can do batch queries.
-	Fewer round trips means you can save, but the provider and the model it self should
-    should support it.
+## Requirements
 
-````python
-# Bad: Individual API calls
-for query in queries:
-	results = index.query(query)
+To run this project locally, you need:
 
-# Good: Batch API calls
-results = index.query(
-	queries,
-	batch=True
-)
-````
+- a valid LLM API key from Groq or another provider
+- or a local Ollama instance
+- a Langfuse instance or local Langfuse service
+- PostgreSQL with pgvector extension, or the provided Docker-based setup
+- Python 3.14 (as declared in the project configuration)
 
-#### Caching
+## Quick start
 
-	Observe the frequent queries and cache them.
-	important part is that you need to embedd them first and then cash it then use similarity search 
-	or similar method to retrieve them.
+### 1. Install dependencies
 
-#### Right Size
+```bash
+uv sync --group dev
+```
 
-	Always start small and continue monitoring. Observe the cost and adjust the parameters accordingly.
-	if the need arrive you can then scale up as needed.
+### 2. Configure environment
 
-Stop (pause, keep container):
+Copy the environment template:
 
+```bash
+cp .env.example .env
+```
+
+Then update the values in `.env` with your own secrets and endpoints, for example:
+
+```env
+APP_ENV=dev
+LOG_LEVEL=INFO
+RATE_LIMIT=20/minute
+CACHE_TTL_SECONDS=300
+MAX_RETRIES=3
+GROQ_API_KEY=your_key_here
+LANGFUSE_SECRET_KEY=your_secret
+LANGFUSE_PUBLIC_KEY=your_public_key
+LANGFUSE_BASE_URL=http://localhost:3000
+```
+
+### 3. Start local dependencies
+
+Use Docker Compose to bring up the supporting services:
+
+```bash
+docker compose up -d
+```
+
+This starts:
+
+- Langfuse on `http://localhost:3000`
+- Ollama on `http://localhost:11434`
+- PostgreSQL on `localhost:5432`
+
+### 4. Run the application
+
+```bash
+uv run python -m uvicorn app.main:app --reload
+```
+
+The API will be available at:
+
+- `http://localhost:8000/docs`
+- `http://localhost:8000/health`
+- `http://localhost:8000/chat`
+
+## API endpoints
+
+### `POST /chat`
+
+Submit a message to the assistant.
+
+Example request:
+
+```json
+{
+	"message": "Summarize the project status",
+	"thread_id": "thread-123"
+}
+```
+
+### `GET /health`
+
+Returns service readiness and dependency state.
+
+### `GET /metrics`
+
+Returns runtime metric summaries for latency, token usage, and error rate.
+
+### `GET /cache/status`
+
+Returns response cache hit/miss statistics and current cache size.
+
+## RAG best practices and implementation notes
+
+### Embedding model consistency
+
+In a RAG pipeline, it is important to ensure the chunker, tokenizer, and embedding model are consistent across indexing
+and querying.
+
+Key principles:
+
+- Use the same embedding model for indexing and querying.
+- Use the same tokenizer for indexing and querying.
+- Embedding quality matters more than dataset size.
+- Test retrieval separately from generation.
+
+For most production use cases, embedding dimensions typically range from 768 to 1536.
+
+### Chunking strategy
+
+The project notes that chunking quality is a major source of retrieval issues.
+
+1. Fixed chunking is often too rigid and can create incomplete context windows.
+2. Recursive chunking is more effective because it respects natural paragraph and sentence boundaries.
+3. Semantic chunking can improve retrieval quality by splitting based on meaning and similarity.
+4. Late chunking embeds the full document first, then chunks around that context for better contextual awareness.
+
+### Why RAG fails in production
+
+Common reasons include:
+
+1. Bad chunking
+2. Embedding mismatch
+3. Retrieval noise
+4. Context overflow beyond the model context window
+5. Hallucination caused by weak retrieval and weak validation
+
+### LLM debugging challenges
+
+Large language models are difficult to debug because:
+
+- outputs are non-deterministic
+- failures can cascade through retrieval and generation
+- silent failure can present confident but wrong output
+- costs can rise unexpectedly from repeated loops or poor retrieval
+
+## Observability and operational guidance
+
+### Traces
+
+Capture:
+
+- agent flow
+- inputs and outputs
+- tool calls
+- decision paths
+
+### Metrics
+
+Track:
+
+- token count
+- latency per step
+- cost per run
+- error rates
+
+### Evaluation
+
+Measure:
+
+- correctness
+- relevance
+- human feedback
+- regression detection
+
+### Vector index tuning
+
+Two common index types are HNSW and IVF.
+
+#### HNSW
+
+HNSW creates a multilayer graph and generally provides a better speed-to-recall tradeoff than flat scans, though it can
+be more memory intensive.
+
+Typical HNSW parameters:
+
+- `m`: maximum number of connections per layer
+- `ef_construction`: candidate list size used when building the graph
+
+#### IVF
+
+IVF partitions vectors into lists and searches only the most relevant subsets. It can be more efficient for large
+datasets but may trade off recall.
+
+Important tuning points:
+
+- create the index after enough data exists
+- set a reasonable number of lists
+- tune the number of probes at query time for recall vs speed
+
+## Cost optimization notes
+
+### Reduce dimensions
+
+If a model can work with a smaller embedding size, reducing vector dimensions can lower cost significantly.
+
+### Quantization
+
+Converting float32 vectors to lower-precision representations can reduce memory and storage cost.
+
+### Batch queries
+
+Batching requests reduces round-trips and is generally more efficient than making thousands of individual calls.
+
+### Caching
+
+Frequent repeated queries can be cached after embedding or retrieval to reduce repeated inference and retrieval cost.
+
+### Right-size the system
+
+Always start small, observe demand, and scale based on real measurements instead of overprovisioning unnecessarily.
+
+## Security checklist
+
+This project includes several security controls, but they should be treated as baseline protections and not a full
+replacement for production security review.
+
+1. Input sanitization blocks prompt injection attempts.
+2. PII detection masks sensitive values in both input and output.
+3. Rate limiting reduces abuse and resource exhaustion.
+4. Pydantic validation validates request and response payloads.
+5. Docker should avoid running as root in production.
+6. Secrets must be managed securely through environment variables or secret managers.
+
+## Reliability checklist
+
+1. Regular backups and disaster recovery procedures
+2. Monitoring and alerting for system health
+3. Load testing and performance validation
+4. Model fallback support
+5. Retry logic with controlled backoff
+6. Graceful error handling and safe defaults
+
+## Observability checklist
+
+1. Langfuse tracing
+2. structured JSON logging
+3. metrics collection for latency, tokens, and errors
+4. metrics endpoint exposure
+
+## Performance checklist
+
+1. response caching with TTL
+2. cache statistics endpoint
+3. token budget awareness
+4. retrieval and generation optimization
+
+## Deployment checklist
+
+1. Docker container with health checks
+2. docker-compose setup for local development
+3. `.env.example` template for required environment variables
+4. automated test coverage and CI pipeline
+
+## Testing and CI
+
+Run the test suite locally:
+
+```bash
+uv run pytest tests -q
+```
+
+Run the suite with coverage:
+
+```bash
+uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=90 tests -q
+```
+
+This project is set up for automated validation in CI to ensure that test coverage and core behavior remain healthy
+across commits.
+
+## Commit conventions
+
+This project follows Conventional Commits.
+
+### Common commit types
+
+| Type       | Purpose                               | Example                                                          |
+|------------|---------------------------------------|------------------------------------------------------------------|
+| `feat`     | add new functionality                 | `feat(api): add cache status endpoint`                           |
+| `fix`      | fix a bug                             | `fix(validation): prevent null pointer in email validation`      |
+| `docs`     | update documentation                  | `docs: add authentication section to API guide`                  |
+| `style`    | formatting-only update                | `style: remove trailing whitespace and fix indentation`          |
+| `refactor` | restructure without changing behavior | `refactor(parser): split monolithic parser into smaller modules` |
+| `perf`     | optimize performance                  | `perf(cache): memoize expensive calculations`                    |
+| `test`     | add or update tests                   | `test(checkout): add edge case tests for discount calculations`  |
+| `chore`    | maintenance tasks                     | `chore(deps): upgrade jest from v27 to v28`                      |
+| `ci`       | CI/CD changes                         | `ci: add automated smoke tests to deployment pipeline`           |
+| `revert`   | revert a previous change              | `revert: remove debug logging that broke production`             |
+
+### Best practices
+
+- Include a scope when useful: `feat(api): ...`.
+- Write the subject in imperative mood: `add`, `fix`, `update`.
+- Keep the subject under 50 characters when possible.
+- Add a body for non-trivial changes to explain the reasoning.
+- Reference issue numbers when applicable.
+
+Example:
+
+```bash
+git commit -m "fix(cache): clear stale entries on startup"
+```
+
+Example with a body:
+
+```bash
+git commit -m "fix(payment): correct rounding error in tax calculation" \
+  -m "The tax calculation was using floor() instead of rounding correctly, which caused discrepancies of up to $0.01 per transaction. Updated to use Decimal with ROUND_HALF_UP for accuracy."
+```
+
+## Docker and local services
+
+The project includes Docker support for local development and environment setup.
+
+### Docker Compose services
+
+- Langfuse
+- PostgreSQL
+- Ollama
+
+### Useful commands
+
+Stop a container:
+
+```bash
 docker stop pgvector-container
-Start (resume stopped container):
+```
 
+Start a stopped container:
+
+```bash
 docker start pgvector-container
-Reset (delete container and data, recreate fresh):
+```
 
-docker stop pgvector-container docker rm pgvector-container docker run --name pgvector-container -e
-POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
-Remove image (after stopping/removing container):
+Reset a container and recreate it:
 
-docker rmi pgvector/pgvector:pg16
-The container is now stopped. Use docker start pgvector-container to bring it back without recreating it.
+```bash
+docker stop pgvector-container
+docker rm pgvector-container
+docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16
+```
 
-to check the settings quickly
+## Screenshots and project views
 
-````cmd
-uv run python -c "
-from app.config import get_settings
-settings = get_settings()
-print(settings)
-"
-````
+The project is organized to support screenshots of the most important operational views. Add images under the `images/`
+directory and reference them here when available.
 
-### How to commit
+### API documentation
 
-Conventional Commits Overview
-Conventional Commits is a standardized format for writing commit messages that makes your version control history
-readable and enables automated changelog generation. The format follows a structure: type (scope): subject.
+![API docs](images/rag_doc.png)
 
-Here's a detailed breakdown of the most common commit types:
+### Langfuse dashboard
 
-Type Purpose When to Use Example
-feat A new feature When you add new functionality to the application feat (auth): add password reset email
-fix A bug fix When you fix a reported bug or issue fix (payment): correct amount calculation in invoice
-docs Documentation changes When you update README, API docs, comments, or guides docs: add installation instructions
-style Code style changes When you format code, fix linting issues, or adjust whitespace (no logic changes)    style:
-reformat user service with prettier
-refactor Code refactoring When you restructure code without changing its behavior refactor (database): extract query
-logic into helpers
-perf Performance improvements When you optimize code for speed or memory perf (cache): implement redis for session
-storage
-test Test-related changes When you add, update, or fix tests test (auth): add unit tests for login flow
-chore Maintenance tasks When you update dependencies, build tools, or CI/CD configs chore: upgrade react to v18
-ci CI/CD pipeline changes When you modify GitHub Actions, Jenkins, or other CI configs ci: add automated deployment
-workflow
-revert Reverting a previous commit When you undo a previous change revert: remove experimental feature from v2.3
-Detailed Guidelines
-feat (Feature)
-Use when you're adding new functionality that users or other parts of the system can benefit from. This is a breaking
-change trigger if it modifies the API contract, so note that in your commit body if needed.
+![Langfuse dashboard](images/rag_langfuse.png)
 
-feat (api): add user role-based access control
-fix (Bug Fix)
-Use when you're resolving a bug reported by users or found in testing. Always reference the issue number if applicable.
+### Test results
 
-fix (validation): prevent null pointer in email validation (#1234)
-docs (Documentation)
-Use when you're updating documentation only—no code changes. This includes README updates, inline comments, API docs, or
-tutorials.
+![Pytest results](images/rag_test.png)
 
-docs: add authentication section to API guide
-style (Code Style)
-Use when making formatting-only changes that don't affect the code's behavior: whitespace, indentation, semicolons,
-quotes, linting fixes, etc. This is not for logic changes; that's a refactor.
+## Contribution
 
-style: remove trailing whitespace and fix indentation
-refactor (Code Refactoring)
-Use when you're restructuring existing code for readability, maintainability, or efficiency, but without changing
-behavior. Extract functions, rename variables, reorganize imports, etc.
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, commit conventions, and pull request guidance.
 
-refactor (parser): split monolithic parser into smaller modules
-perf (Performance)
-Use when you're making optimization changes that improve speed, memory usage, or scalability. Always measure the
-improvement if possible.
+## License
 
-perf (rendering): memoize expensive calculations in component
-test (Testing)
-Use when you're adding, fixing, or updating tests. This includes unit tests, integration tests, e2e tests, or test
-configurations.
+This project is released under the [MIT License](LICENSE).
 
-test (checkout): add edge case tests for discount calculations
-chore (Chores/Maintenance)
-Use for routine maintenance tasks that don't affect the production code directly: dependency updates, build scripts,
-tooling configs, version bumps, etc.
+## Support
 
-chore (deps): upgrade jest from v27 to v28
-ci (Continuous Integration)
-Use when you're modifying CI/CD pipelines: GitHub Actions, GitLab CI, Jenkins, deployment scripts, automated testing,
-etc.
-
-ci: add automated smoke tests to deployment pipeline
-revert (Revert)
-Use when you're undoing a previous commit. Include the original commit hash in the body.
-
-revert: remove debug logging that broke production (#456)
-Best Practices
-Include a scope (optional but recommended): The part in parentheses clarifies what area was affected.
-
-feat (auth): add JWT token refresh mechanism
-^^^^
-scope
-Write in imperative mood: Use "add," "fix," "update" instead of "added," "fixed," "updated."
-
-✅ fix (cache): clear stale entries on startup
-❌ fix (cache): cleared stale entries on startup
-Keep the subject under 50 characters: Make it scannable in git logs.
-
-Add a detailed body for complex changes: Separate it from the subject with a blank line and explain the why, not just
-the what.
-
-fix (payment): correct rounding error in tax calculation
-
-The tax calculation was using floor () instead of proper rounding,
-causing discrepancies of up to $0.01 per transaction. Changed to
-use Decimal with ROUND_HALF_UP for accuracy.
-Reference issues: Link to issue trackers when relevant.
-
-feat (notifications): implement push notifications
-
-Closes #789
-Related to #456
+For questions, bug reports, or feature requests, open a GitHub issue with reproduction steps, expected behavior, and
+environment details.

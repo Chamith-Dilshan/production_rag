@@ -6,7 +6,7 @@ class ResponseCache:
     """
     In Memory response cache with TTL(time-to-live)
     In production, replace this with Redis for:
-    - Persistense across restarts
+    - Persistence across restarts
     - Shared cache across multiple instances
     - Build in TTL
     """
@@ -24,7 +24,7 @@ class ResponseCache:
         return hashlib.sha256(normalized.encode()).hexdigest()
 
     def get(self, query: str) -> str | None:
-        """Get cached response if it hits and hasn't expired.
+        """Get a cached response if it hits and hasn't expired.
         return None on cache miss.
         """
         key = self._make_key(query)
@@ -46,7 +46,7 @@ class ResponseCache:
         key = self._make_key(query)
         self._cache[key] = {
             "response": response,
-            "timestamp": datetime.now(UTC),
+            "timestamp": datetime.now(UTC).isoformat(),
             "query": query,
         }
 
