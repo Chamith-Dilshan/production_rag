@@ -44,10 +44,14 @@ async def lifespan(app: FastAPI):
         },
     )
 
-    security = SecurityPipeline()
-    cache = ResponseCache(ttl_seconds=settings.CACHE_TTL_SECONDS)
-    metrics = MetricsCollector()
-    agent = ProductionAgent()
+    if security is None:
+        security = SecurityPipeline()
+    if cache is None:
+        cache = ResponseCache(ttl_seconds=settings.CACHE_TTL_SECONDS)
+    if metrics is None:
+        metrics = MetricsCollector()
+    if agent is None:
+        agent = ProductionAgent()
 
     logger.info("Components initialized")
     yield
@@ -70,9 +74,9 @@ app.state.limiter = limiter
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     """Run security checks, cache lookup, generation, and output validation.
         Flow:
-        1.Security check(injection + PII masking)
+        1.Security check (injection + PII masking)
         2.Cache lookup
-        3.LangGraph agent invoke( if cache missed)
+        3.LangGraph agent invoke ( if cache missed)
         4.Output validation
         5.Cache store
         6.Return response
