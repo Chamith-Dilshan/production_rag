@@ -145,13 +145,13 @@ LANGFUSE_BASE_URL=http://localhost:3000
 
 ### 3. Start local dependencies
 
-Use Docker Compose to bring up the supporting services:
+I didn't dockerise the app because current implementation is using ollama, Langfuse, PostgreSQL instances.
+and if you are using Ollama you have to download the models as well. my recomondation is change all the olllma 
+implementations to use a cloud provider( don't worry that's not a big deal, just change the model name and API keys).
+Then you have to local host or get a cloud instance of langfuse.( you can use langsmith, but you have to change the implimentaion a little bit.)
+and postgres sql instance with pg vector extension. if you have all these three then you are good to go.
 
-```bash
-docker compose up -d
-```
-
-This starts:
+Remember to start all the dependencies:
 
 - Langfuse on `http://localhost:3000`
 - Ollama on `http://localhost:11434`
